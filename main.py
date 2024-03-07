@@ -32,7 +32,8 @@ current_dir = os.getcwd()
 added_dir = current_dir + "//Orbit_Propagator"
 sys.path.append(added_dir)
 
-from OrbitPropagator import OrbitPropagator as OP
+from Trajectory_Solver import traj_solver as TS
+#from OrbitPropagator import OrbitPropagator as OP
 import Planetary_Data as pd
 import tools as t
 
@@ -57,6 +58,7 @@ num_orbits      maximum number of orbital rotations. Just puts a final time
 init_percent    initial position of orbit as percent of orbital period. 50% 
                 will start 180 degrees from the starting point. This method 
                 will be changed in the future. 
+fin_percent     final index percentage, same as init_percent
 cb              Central body, see planetary data folder for dictionary 
                 entry. Includes 'radius,' 'mu,' and 'mass' for the body
 dt              time step for Orbit propagator [s]. 
@@ -67,15 +69,14 @@ c2              Final orbit, defined the same as c0
 '''
 
 #decay orbit
-min_height  = 300       # max orbit bounds
-max_height  = 5000      # max orbit bound lower
 n_steps     = 101       # number of steps in soln
 max_u       = 10e-3     # Max thrust (N)
-time_cost   = 10e-6     # time cost
+time_cost   = 0         # time cost
 fuel_cost   = 1         # fuel cost
 num_orbits  = 100       # max orbit times
 
 init_percent = 50       # inital percent along orbit
+fin_percent  = 5        # final percent along orbit
 
 
 #propogation time span and step
@@ -85,10 +86,17 @@ dt = 100        #time step for orbit propagator clas
 #define initial and final orbit conditions
 # [a,e,i,ta,aop,raan]
 #ISS
-c0 = [cb['radius']+414.0, 0.01,51.6393,0.0,234.1955,105.6372]
+#c0 = [cb['radius']+414.0, 0.01,51.6393,0.0,234.1955,105.6372]
+a1,e1,i1,ta1,aop1,raan1 = t.tle2coes(current_dir + '//Dummy_TLEs//AO-85.txt')
+c0 = [a1,e1,i1,ta1,aop1,raan1]
 
 # random 
-c2 = [cb['radius']+900.0, 0.01,51.6393,0.0,234.1955,105.6372]
+#c2 = [cb['radius']+900.0, 0.01,51.6393,0.0,234.1955,105.6372]
+a,e,i,ta,aop,raan = t.tle2coes(current_dir + '//Dummy_TLEs//AO-40.txt')
+c2 = [a,e,i,ta,aop,raan]
+
+min_height  = 300       # max orbit bounds
+max_height  = a         # max orbit bound lower
 '''
 END PARAMETERS
 --------------------------------
@@ -96,6 +104,10 @@ If you're just playing with the program, you shouldn't need to change
 anything past here.
 '''
 
+solver = TS(c0, c2, 50, 50, 2*a, 101, 10e-3)
+rs, thrust, tm = solver.find_traj_gen()
+
+'''
 #global timespan
 tspan0 = t.find_period(c0[0])
 tspan2 = t.find_period(c2[0])
@@ -108,6 +120,7 @@ op0 = OP(c0,tspan0,dt,coes=True)
 op1 = OP(c2,tspan2,dt,coes=True)
 
 start_index = int(len(op0.rs[:,0])*(init_percent/100))
+final_index = int(len(op1.rs[:,0])*(fin_percent/100))
 
 max_orb = cb['radius'] + max_height
 min_orb = cb['radius'] + min_height
@@ -211,39 +224,39 @@ final = m.Param(value=final)
 
 #print(final*r1.VALUE) 
 
-m.Obj(final*(r1 - op1.rs[0, 0])**2)
-m.Obj(final*(r2 - op1.rs[0, 1])**2)
-m.Obj(final*(r3 - op1.rs[0, 2])**2)
+m.Obj(final*(r1 - op1.rs[final_index, 0])**2)
+m.Obj(final*(r2 - op1.rs[final_index, 1])**2)
+m.Obj(final*(r3 - op1.rs[final_index, 2])**2)
 
-m.Obj(final*(r1dot - op1.vs[0, 0])**2)
-m.Obj(final*(r2dot - op1.vs[0, 1])**2)
-m.Obj(final*(r3dot - op1.vs[0, 2])**2)
+m.Obj(final*(r1dot - op1.vs[final_index, 0])**2)
+m.Obj(final*(r2dot - op1.vs[final_index, 1])**2)
+m.Obj(final*(r3dot - op1.vs[final_index, 2])**2)
 
 m.options.IMODE = 6
 m.options.solver = 3
 #m.options.ATOL = 1e-3
 m.options.MAX_ITER = 5000
 m.solve(disp=True)    # solve
-
+'''
 #Set dark background
 plt.style.use('dark_background')
 
 #make thrust plots
-tm_adj = m.time * tf.VALUE[0]
+#tm_adj = m.time * tf.VALUE[0]
 fig1 = plt.figure(figsize=(32,8))
 fig1, (ax0, ax1, ax2) = plt.subplots(1,3)
 
-ax0.plot(tm_adj, u1.VALUE, 'r')
+ax0.plot(tm, thrust[:,0], 'r')
 ax0.set(xlabel='Time [s]', ylabel='Thrust [N]')
 ax0.set_title('X Thrust')
 ax0.label_outer()
 
-ax1.plot(tm_adj, u2.VALUE, 'b')
+ax1.plot(tm, thrust[:,1], 'b')
 ax1.set_title('Y Thrust')
 ax1.set(xlabel='Time [s]', ylabel='Thrust [N]')
 ax1.label_outer()
 
-ax2.plot(tm_adj, u3.VALUE, 'm')
+ax2.plot(tm, thrust[:,2], 'm')
 ax2.set_title('Z Thrust')
 ax2.set(xlabel='Time [s]', ylabel='Thrust [N]')
 ax2.label_outer()
@@ -253,12 +266,14 @@ fig = plt.figure(figsize=(16,8))
 ax = fig.add_subplot(111,projection='3d')
 
 # plot trajectory
-ax.plot(op0.rs[:,0],op0.rs[:,1],op0.rs[:,2],'r--', label='initial orbit')
+ax.plot(solver.op0.rs[:,0],solver.op0.rs[:,1],solver.op0.rs[:,2],'r--', label='initial orbit')
 
-ax.plot(op1.rs[:,0],op1.rs[:,1],op1.rs[:,2],'m--', label='final orbit')
+ax.plot(solver.op1.rs[:,0],solver.op1.rs[:,1],solver.op1.rs[:,2],'m--', label='final orbit')
 
-ax.plot(r1.VALUE,r2.VALUE,r3.VALUE,'b', label='Trajectory')
-ax.plot(op0.rs[start_index,0], op0.rs[start_index,1], op0.rs[start_index,2],
+ax.plot(rs[:,0],rs[:,1],rs[:,2],'b', label='Trajectory')
+ax.plot(solver.op0.rs[solver.start_index,0],
+        solver.op0.rs[solver.start_index,1], 
+        solver.op0.rs[solver.start_index,2],
         marker='o', color='w', label='Initial Position')
 
 # plot central body

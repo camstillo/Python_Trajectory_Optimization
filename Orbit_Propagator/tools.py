@@ -171,7 +171,7 @@ def tle2coes(tle_filename, mu=pd.earth['mu']):
     # calculate true anomaly
     ta = true_anomaly([E, e])
     
-    return a,e,i,ta,aop,raan,[year, month, day, hour]
+    return a,e,i,ta,aop,raan #,[year, month, day, hour]
     
 def calc_epoch(epoch):
     # epoch year
