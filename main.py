@@ -25,59 +25,109 @@ functions.
 from gekko import GEKKO
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 import sys
 
-sys.path.append(r'C://Users//Cameron//Documents//Python_Trajectory_Optimization//Orbit_Propagator')
+current_dir = os.getcwd()
+added_dir = current_dir + "//Orbit_Propagator"
+sys.path.append(added_dir)
 
 from OrbitPropagator import OrbitPropagator as OP
 import Planetary_Data as pd
 import tools as t
 
+'''
+Parameters: 
+Change this section to use different parameters in the simulation
+---------------------------------------
+min height      minimum orbital height, just keep at 300 unless already
+                in a higher orbit [km]
+max height      maximum orbital height, prevents simulation from going 
+                thousands of km out [km]
+n_steps         number of steps for solver. Will increase time to simulate
+max_u           maximum thrust, depends on thruster. In the future, will
+                add a function that takes in the specific impulse. [N]
+time_cost       cost value of time. Increase to make time weighted more 
+                heavily in the optimization (i.e. minimize time more than
+                fuel or other parameter). Increasing too much will result
+                in strange trajectories.
+fuel_cost       cost value of fuel in optimization. Same as time_cost.
+num_orbits      maximum number of orbital rotations. Just puts a final time
+                parameter on the function even though it's minimizing for it
+init_percent    initial position of orbit as percent of orbital period. 50% 
+                will start 180 degrees from the starting point. This method 
+                will be changed in the future. 
+cb              Central body, see planetary data folder for dictionary 
+                entry. Includes 'radius,' 'mu,' and 'mass' for the body
+dt              time step for Orbit propagator [s]. 
+c0              initial orbital parameters in keplerian elements. Can use
+                t.tle2coes to solve from TLE text file. order of elements 
+                follows [a,e,i,ta,aop,raan]
+c2              Final orbit, defined the same as c0
+'''
+
+#decay orbit
+min_height  = 300       # max orbit bounds
+max_height  = 5000      # max orbit bound lower
+n_steps     = 101       # number of steps in soln
+max_u       = 10e-3     # Max thrust (N)
+time_cost   = 10e-6     # time cost
+fuel_cost   = 1         # fuel cost
+num_orbits  = 100       # max orbit times
+
+init_percent = 50       # inital percent along orbit
+
+
 #propogation time span and step
 cb = pd.earth   #sets central body as Earth
-dt = 100        #time step for orbit propagator class
+dt = 100        #time step for orbit propagator clas
 
 #define initial and final orbit conditions
+# [a,e,i,ta,aop,raan]
 #ISS
-c0 = [cb['radius']+414.0, 0.0006189,51.6393,0.0,234.1955,105.6372]
-tspan0 = t.find_period(c0[0])
+c0 = [cb['radius']+414.0, 0.01,51.6393,0.0,234.1955,105.6372]
 
-# random
-c2 = [cb['radius']+700.0,0.0006189,51.6393,0.0,234.1955,105.6372]
-tspan2 = t.find_period(c2[0])
+# random 
+c2 = [cb['radius']+900.0, 0.01,51.6393,0.0,234.1955,105.6372]
+'''
+END PARAMETERS
+--------------------------------
+If you're just playing with the program, you shouldn't need to change 
+anything past here.
+'''
 
 #global timespan
-tspan = 0
+tspan0 = t.find_period(c0[0])
+tspan2 = t.find_period(c2[0])
 if tspan0 > tspan2:
-    tspan = 2*tspan0
+    tspan = num_orbits*tspan0
 else:
-    tspan = 2*tspan2
+    tspan = num_orbits*tspan2
 
 op0 = OP(c0,tspan0,dt,coes=True)
 op1 = OP(c2,tspan2,dt,coes=True)
 
-#Define a bunch of parameters
-n_steps = 101         # number of steps in soln
-max_u   = 100e-3      # Max thrust (N)
-mu      = 3.986e14    # gravitational parameter earth (m**3/s**2)
-tof     = tspan       # final time parameter
+start_index = int(len(op0.rs[:,0])*(init_percent/100))
+
+max_orb = cb['radius'] + max_height
+min_orb = cb['radius'] + min_height
 
 m = GEKKO(remote=False)
 
 #define time varible
-m.time = np.linspace(0, tof, n_steps)
+m.time = np.linspace(0, 1, n_steps)
 
 #define fixed variables
 theta_i = m.FV(lb = 0, ub = 360)
 theta_f = m.FV(lb = 0, ub = 360)
 
-rx_i = m.Var()
-ry_i = m.Var()
-rz_i = m.Var()
+rx_i = m.Var(op0.rs[start_index,0])
+ry_i = m.Var(op0.rs[start_index,1])
+rz_i = m.Var(op0.rs[start_index,2])
 
-vx_i = m.Var()
-vy_i = m.Var()
-vz_i = m.Var()
+vx_i = m.Var(op0.vs[start_index,0])
+vy_i = m.Var(op0.vs[start_index,1])
+vz_i = m.Var(op0.vs[start_index,2])
 
 rx_f = m.Var()
 ry_f = m.Var()
@@ -127,16 +177,22 @@ u2.STATUS = 1
 u3 = m.MV(lb = -max_u, ub = max_u)
 u3.STATUS = 1
 
-m.Equation(r1.dt() == r1dot)
-m.Equation(r2.dt() == r2dot)
-m.Equation(r3.dt() == r3dot)
+#define final time parameter
+tf = m.FV(value=1.0, lb=0.001, ub=tspan)
+tf.STATUS = 1
 
-r = m.Intermediate(m.sqrt(r1**2 + r2**2 + r3**2))
+m.Equation(r1.dt()/tf == r1dot)
+m.Equation(r2.dt()/tf == r2dot)
+m.Equation(r3.dt()/tf == r3dot)
+
+r = m.Var(lb=min_orb, ub=max_orb)
+
+m.Equation(r == m.sqrt(r1**2 + r2**2 + r3**2))
 v = m.Intermediate(m.sqrt(r1dot**2 + r2dot**2 + r3dot**2))
 
-m.Equation(-cb['mu']*r1/r**3 == r1dot.dt() + u1)
-m.Equation(-cb['mu']*r2/r**3 == r2dot.dt() + u2)
-m.Equation(-cb['mu']*r3/r**3 == r3dot.dt() + u3)
+m.Equation(-cb['mu']*r1/r**3 == r1dot.dt()/tf + u1)
+m.Equation(-cb['mu']*r2/r**3 == r2dot.dt()/tf + u2)
+m.Equation(-cb['mu']*r3/r**3 == r3dot.dt()/tf + u3)
 
 #m.fix_final(r1, rx_f)
 #m.fix_final(r2, ry_f)
@@ -146,21 +202,22 @@ m.Equation(-cb['mu']*r3/r**3 == r3dot.dt() + u3)
 #m.fix_final(r2dot, vy_f)
 #m.fix_final(r3dot, vz_f)
 
-#m.Minimize(m.integral(u1**2 + u2**2 + u3**2))
+m.Minimize(fuel_cost*m.integral(u1**2 + u2**2 + u3**2))
+m.Minimize(time_cost*tf)
 
 final = np.zeros(len(m.time))
 final[-1] = 1
 final = m.Param(value=final)
 
-print(final*r1.VALUE) 
+#print(final*r1.VALUE) 
 
-m.Obj((final*r1 - op1.rs[0, 0])**2)
-m.Obj((final*r2 - op1.rs[0, 1])**2)
-m.Obj((final*r3 - op1.rs[0, 2])**2)
+m.Obj(final*(r1 - op1.rs[0, 0])**2)
+m.Obj(final*(r2 - op1.rs[0, 1])**2)
+m.Obj(final*(r3 - op1.rs[0, 2])**2)
 
-m.Obj((final*r1dot - op1.vs[0, 0])**2)
-m.Obj((final*r2dot - op1.vs[0, 1])**2)
-m.Obj((final*r3dot - op1.vs[0, 2])**2)
+m.Obj(final*(r1dot - op1.vs[0, 0])**2)
+m.Obj(final*(r2dot - op1.vs[0, 1])**2)
+m.Obj(final*(r3dot - op1.vs[0, 2])**2)
 
 m.options.IMODE = 6
 m.options.solver = 3
@@ -170,6 +227,26 @@ m.solve(disp=True)    # solve
 
 #Set dark background
 plt.style.use('dark_background')
+
+#make thrust plots
+tm_adj = m.time * tf.VALUE[0]
+fig1 = plt.figure(figsize=(32,8))
+fig1, (ax0, ax1, ax2) = plt.subplots(1,3)
+
+ax0.plot(tm_adj, u1.VALUE, 'r')
+ax0.set(xlabel='Time [s]', ylabel='Thrust [N]')
+ax0.set_title('X Thrust')
+ax0.label_outer()
+
+ax1.plot(tm_adj, u2.VALUE, 'b')
+ax1.set_title('Y Thrust')
+ax1.set(xlabel='Time [s]', ylabel='Thrust [N]')
+ax1.label_outer()
+
+ax2.plot(tm_adj, u3.VALUE, 'm')
+ax2.set_title('Z Thrust')
+ax2.set(xlabel='Time [s]', ylabel='Thrust [N]')
+ax2.label_outer()
 
 #define fig object
 fig = plt.figure(figsize=(16,8))
@@ -181,15 +258,15 @@ ax.plot(op0.rs[:,0],op0.rs[:,1],op0.rs[:,2],'r--', label='initial orbit')
 ax.plot(op1.rs[:,0],op1.rs[:,1],op1.rs[:,2],'m--', label='final orbit')
 
 ax.plot(r1.VALUE,r2.VALUE,r3.VALUE,'b', label='Trajectory')
-ax.plot(r1.VALUE[0], r2.VALUE[0], r2.VALUE[0], marker='o',
-        color='w', label='Initial Position')
+ax.plot(op0.rs[start_index,0], op0.rs[start_index,1], op0.rs[start_index,2],
+        marker='o', color='w', label='Initial Position')
 
 # plot central body
-_u,_v = np.mgrid[0:2*np.pi:20j,0:np.pi:10j]
-_x = cb['radius']*np.cos(_u)*np.sin(_v)
-_y = cb['radius']*np.sin(_u)*np.sin(_v)
-_z = cb['radius']*np.cos(_v)
-ax.plot_surface(_x, _y, _z, cmap='Blues')
+#_u,_v = np.mgrid[0:2*np.pi:20j,0:np.pi:10j]
+#_x = cb['radius']*np.cos(_u)*np.sin(_v)
+#_y = cb['radius']*np.sin(_u)*np.sin(_v)
+#_z = cb['radius']*np.cos(_v)
+#ax.plot_surface(_x, _y, _z, cmap='Blues')
 
 #plot the x, y, z vectors
 l = cb['radius'] * 2

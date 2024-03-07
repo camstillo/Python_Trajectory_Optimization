@@ -201,7 +201,7 @@ def true_anomaly(arr):
 def tle2rv(tle_filename):
     return coes2rv(tle2coes(tle_filename))
 
-def true_anomaly_r(rs, ta_init=0, mu=pd.earth['mu']):
+def true_anomaly_r(rs, mu=pd.earth['mu']):
     # unpack state
     rx, ry, rz, vx, vy, vz = rs
     
@@ -211,8 +211,6 @@ def true_anomaly_r(rs, ta_init=0, mu=pd.earth['mu']):
     
     # flip velocity if necessary
     rdotv = np.dot(r,v)
-    if rdotv < 0:
-        v = 2*np.pi - v
     
     # define quantities for equation
     r_mag = np.linalg.norm(r)
@@ -222,8 +220,11 @@ def true_anomaly_r(rs, ta_init=0, mu=pd.earth['mu']):
     E_vect = ((v_mag**2/mu) - (1/r_mag))*r - ((rdotv)/mu)*v
     E_mag = np.linalg.norm(E_vect)
     
-    #solve for total anomaly
-    ta = np.arccos(np.dot(E_vect, r)/(E_mag*r_mag)) + ta_init
+    #solve for true anomaly
+    if rdotv >= 0:
+        ta = np.arccos(np.dot(E_vect, r)/(E_mag*r_mag))
+    else:
+        ta = 2*np.pi - np.arccos(np.dot(E_vect, r)/(E_mag*r_mag))
     
     return ta
     
