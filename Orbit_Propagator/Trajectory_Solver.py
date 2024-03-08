@@ -24,9 +24,50 @@ import Planetary_Data as pd
 
 class traj_solver:
     def __init__(self, c0, c1, init_pos, final_pos, max_height, 
-                 n_steps, max_u, fuel_cost=1, time_cost=1, min_height=300,
+                 n_steps, max_u, fuel_cost=1, time_cost=10e-6, min_height=300,
                  num_orbits=10, dt=100, pass_coes=True, cb=pd.earth, 
                  remote_solve=False):
+        '''
+        init function, called at construction of traj_solver
+
+        Parameters
+        ----------
+        c0 : TYPE list 
+            all orbital elements for initial orbit [a,e,i,ta,aop,raan]
+        c1 : TYPE list
+            all orbital elements for final orbit [a,e,i,ta,aop,raan]
+        init_pos : TYPE float
+            percent along orbit that the satellite should start at
+        final_pos : TYPE
+            percent along orbit that the satellite should end at
+        max_height : TYPE int [km]
+            maximum height above earth orbit can go
+        n_steps : TYPE int
+            DESCRIPTION.
+        max_u : TYPE
+            DESCRIPTION.
+        fuel_cost : TYPE, optional
+            DESCRIPTION. The default is 1.
+        time_cost : TYPE, optional
+            DESCRIPTION. The default is 10e-6.
+        min_height : TYPE, optional
+            DESCRIPTION. The default is 300.
+        num_orbits : TYPE, optional
+            DESCRIPTION. The default is 10.
+        dt : TYPE, optional
+            DESCRIPTION. The default is 100.
+        pass_coes : TYPE, optional
+            DESCRIPTION. The default is True.
+        cb : TYPE, optional
+            DESCRIPTION. The default is pd.earth.
+        remote_solve : TYPE, optional
+            DESCRIPTION. The default is False.
+
+        Returns
+        -------
+        None.
+
+        '''
         #Set self parameters
         self.c0 = c0
         self.c1 = c1
@@ -171,8 +212,8 @@ class traj_solver:
 
         tm_adj = m.time * tf.VALUE[0]
         
-        postion = np.array([[r1.VALUE], [r2.VALUE], [r3.VALUE]])
-        thrust = np.array([[u1.VALUE], [u2.VALUE], [u3.VALUE]])
+        postion = np.array([r1.VALUE, r2.VALUE, r3.VALUE])
+        thrust = np.array([u1.VALUE, u2.VALUE, u3.VALUE])
 
         return postion, thrust, tm_adj
 

@@ -92,11 +92,11 @@ c0 = [a1,e1,i1,ta1,aop1,raan1]
 
 # random 
 #c2 = [cb['radius']+900.0, 0.01,51.6393,0.0,234.1955,105.6372]
-a,e,i,ta,aop,raan = t.tle2coes(current_dir + '//Dummy_TLEs//AO-40.txt')
-c2 = [a,e,i,ta,aop,raan]
+a,e,i,ta,aop,raan = t.tle2coes(current_dir + '//Dummy_TLEs//AO-85.txt')
+c2 = [a,e,90,ta,aop,raan]
 
-min_height  = 300       # max orbit bounds
-max_height  = a         # max orbit bound lower
+min_height  = 300       # min orbit bound
+max_height  = 2000      # max orbit bound 
 '''
 END PARAMETERS
 --------------------------------
@@ -104,7 +104,7 @@ If you're just playing with the program, you shouldn't need to change
 anything past here.
 '''
 
-solver = TS(c0, c2, 50, 50, 2*a, 101, 10e-3)
+solver = TS(c0, c2, init_percent, fin_percent, max_height, n_steps, max_u)
 rs, thrust, tm = solver.find_traj_gen()
 
 '''
@@ -246,17 +246,17 @@ plt.style.use('dark_background')
 fig1 = plt.figure(figsize=(32,8))
 fig1, (ax0, ax1, ax2) = plt.subplots(1,3)
 
-ax0.plot(tm, thrust[:,0], 'r')
+ax0.plot(tm, thrust[0], 'r')
 ax0.set(xlabel='Time [s]', ylabel='Thrust [N]')
 ax0.set_title('X Thrust')
 ax0.label_outer()
 
-ax1.plot(tm, thrust[:,1], 'b')
+ax1.plot(tm, thrust[1], 'b')
 ax1.set_title('Y Thrust')
 ax1.set(xlabel='Time [s]', ylabel='Thrust [N]')
 ax1.label_outer()
 
-ax2.plot(tm, thrust[:,2], 'm')
+ax2.plot(tm, thrust[2], 'm')
 ax2.set_title('Z Thrust')
 ax2.set(xlabel='Time [s]', ylabel='Thrust [N]')
 ax2.label_outer()
