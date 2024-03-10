@@ -212,10 +212,10 @@ class traj_solver:
 
         tm_adj = m.time * tf.VALUE[0]
         
-        postion = np.array([r1.VALUE, r2.VALUE, r3.VALUE])
-        thrust = np.array([u1.VALUE, u2.VALUE, u3.VALUE])
+        position = np.array((r1.VALUE, r2.VALUE, r3.VALUE)).transpose()
+        thrust = np.array((u1.VALUE, u2.VALUE, u3.VALUE)).transpose()
 
-        return postion, thrust, tm_adj
+        return position, thrust, tm_adj
 
 
 

@@ -246,17 +246,20 @@ plt.style.use('dark_background')
 fig1 = plt.figure(figsize=(32,8))
 fig1, (ax0, ax1, ax2) = plt.subplots(1,3)
 
-ax0.plot(tm, thrust[0], 'r')
+#xthrust, ythrust, zthrust = thrust[:][0:3].tolist()
+print(thrust.shape)
+
+ax0.plot(tm, thrust[:,0], 'r')
 ax0.set(xlabel='Time [s]', ylabel='Thrust [N]')
 ax0.set_title('X Thrust')
 ax0.label_outer()
 
-ax1.plot(tm, thrust[1], 'b')
+ax1.plot(tm, thrust[:,1], 'b')
 ax1.set_title('Y Thrust')
 ax1.set(xlabel='Time [s]', ylabel='Thrust [N]')
 ax1.label_outer()
 
-ax2.plot(tm, thrust[2], 'm')
+ax2.plot(tm, thrust[:,2], 'm')
 ax2.set_title('Z Thrust')
 ax2.set(xlabel='Time [s]', ylabel='Thrust [N]')
 ax2.label_outer()
