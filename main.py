@@ -8,7 +8,8 @@ and thrust profiles for
 First, the program uses a Orbit propagator to numerically solve for
 an intial and final orbit given either TLEs or by defining orbital 
 parameters. See "/Orbit_Propagator" folder for details on this 
-solver. 
+solver. This is based on a project by Alonso Gonzales (YouTube:
+https://www.youtube.com/@alfonsogonzalez-astrodynam2207)
 
 Next, the program uses the GEKKO optimization library to set 
 initial and final orbits from the output of the orbit propagator. 
@@ -243,7 +244,7 @@ plt.style.use('dark_background')
 
 #make thrust plots
 #tm_adj = m.time * tf.VALUE[0]
-fig1 = plt.figure(figsize=(32,8))
+#fig1 = plt.figure(figsize=(32,8))
 fig1, (ax0, ax1, ax2) = plt.subplots(1,3)
 
 #xthrust, ythrust, zthrust = thrust[:][0:3].tolist()
