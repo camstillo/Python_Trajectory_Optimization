@@ -71,7 +71,7 @@ c2              Final orbit, defined the same as c0
 
 #decay orbit
 n_steps     = 101       # number of steps in soln
-max_u       = 10e-3     # Max thrust (N)
+max_u       = 1         # Max acceleration from thrust (m/s^2)
 time_cost   = 0         # time cost
 fuel_cost   = 1         # fuel cost
 num_orbits  = 100       # max orbit times
@@ -94,7 +94,7 @@ c0 = [a1,e1,i1,ta1,aop1,raan1]
 # random 
 #c2 = [cb['radius']+900.0, 0.01,51.6393,0.0,234.1955,105.6372]
 a,e,i,ta,aop,raan = t.tle2coes(current_dir + '//Dummy_TLEs//AO-85.txt')
-c2 = [a,e,90,ta,aop,raan]
+c2 = [cb['radius']+180,0,i,ta,aop,raan]
 
 min_height  = 300       # min orbit bound
 max_height  = 2000      # max orbit bound 
