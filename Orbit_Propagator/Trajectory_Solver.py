@@ -20,13 +20,15 @@ import tools as t
 import numpy as np
 from gekko import GEKKO
 from OrbitPropagator import OrbitPropagator as OP
+from OrbitPropagator import null_perts
 import Planetary_Data as pd
 
 class traj_solver:
     def __init__(self, c0, c1, init_pos, final_pos, max_height, 
                  n_steps, max_u, fuel_cost=1, time_cost=10e-6, min_height=300,
                  num_orbits=10, dt=100, pass_coes=True, cb=pd.earth, 
-                 remote_solve=False):
+                 remote_solve=False, toggle_j2=False, toggle_aero=False,
+                 Cd=2.2, A=(100e-6**2), mass0=1.0):
         '''
         init function, called at construction of traj_solver
 
@@ -85,6 +87,13 @@ class traj_solver:
         self.time_cost = time_cost
         self.remote_solve = remote_solve
         
+        #perturbations
+        self.toggle_j2 = toggle_j2
+        self.toggle_aero = toggle_aero
+        self.Cd = Cd
+        self.A = A
+        self.mass0=mass0
+        
         #solve for the initial orbits of both 
         self.find_init_orbit()
     
@@ -97,8 +106,17 @@ class traj_solver:
         else:
             self.tspan = self.num_orbits*tspan1
 
-        self.op0 = OP(self.c0,tspan0,self.dt,self.coes)
-        self.op1 = OP(self.c1,tspan1,self.dt,self.coes)
+        #account for perturbations
+        perts = null_perts()
+        perts['J2'] = self.toggle_j2
+        perts['aero'] = self.toggle_aero
+        perts['Cd'] = self.Cd
+        perts['A'] = self.A
+
+        self.op0 = OP(self.c0,tspan0,self.dt,self.coes,
+                      perts=perts,mass0=self.mass0)
+        self.op1 = OP(self.c1,tspan1,self.dt,self.coes,
+                      perts=perts,mass0=self.mass0)
 
         self.start_index = int(len(self.op0.rs[:,0])*(self.init_percent/100))
         self.final_index = int(len(self.op1.rs[:,0])*(self.final_percent/100))
@@ -164,6 +182,10 @@ class traj_solver:
         r1dot = m.Var(vx_i)
         r2dot = m.Var(vy_i)
         r3dot = m.Var(vz_i)
+        
+        ax_j2 = m.Var(0.0)
+        ay_j2 = m.Var(0.0)
+        az_j2 = m.Var(0.0)
 
         u1 = m.MV(lb = -self.max_u, ub = self.max_u)
         u1.STATUS = 1
@@ -184,10 +206,24 @@ class traj_solver:
 
         m.Equation(r == m.sqrt(r1**2 + r2**2 + r3**2))
         #v = m.Intermediate(m.sqrt(r1dot**2 + r2dot**2 + r3dot**2))
+        
+        #J2 Perturbation
+        if (self.toggle_j2):
+            tx = m.Intermediate(r1/r*(5*(r3**2)/(r**2) - 1))
+            ty = m.Intermediate(r2/r*(5*(r3**2)/(r**2) - 1))
+            tz = m.Intermediate(r3/r*(5*(r3**2)/(r**2) - 3))
+        
+            ax_j2 = m.Intermediate(1.5*self.cb['J2']*self.cb['mu']*self.cb['radius']**2/r**4*tx)
+            ay_j2 = m.Intermediate(1.5*self.cb['J2']*self.cb['mu']*self.cb['radius']**2/r**4*ty)
+            az_j2 = m.Intermediate(1.5*self.cb['J2']*self.cb['mu']*self.cb['radius']**2/r**4*tz)
 
-        m.Equation(-self.cb['mu']*r1/r**3 == r1dot.dt()/tf + u1)
-        m.Equation(-self.cb['mu']*r2/r**3 == r2dot.dt()/tf + u2)
-        m.Equation(-self.cb['mu']*r3/r**3 == r3dot.dt()/tf + u3)
+        m.Equation(-self.cb['mu']*r1/r**3 - ax_j2 == r1dot.dt()/tf + u1)
+        m.Equation(-self.cb['mu']*r2/r**3 - ay_j2 == r2dot.dt()/tf + u2)
+        m.Equation(-self.cb['mu']*r3/r**3 - az_j2 == r3dot.dt()/tf + u3)
+        
+       # m.Equation(-self.cb['mu']*r1/r**3 == r1dot.dt()/tf + u1)
+       # m.Equation(-self.cb['mu']*r2/r**3 == r2dot.dt()/tf + u2)
+       # m.Equation(-self.cb['mu']*r3/r**3 == r3dot.dt()/tf + u3)
 
         m.Minimize(self.fuel_cost*m.integral(u1**2 + u2**2 + u3**2))
         m.Minimize(self.time_cost*tf)
@@ -214,6 +250,8 @@ class traj_solver:
         
         position = np.array((r1.VALUE, r2.VALUE, r3.VALUE)).transpose()
         thrust = np.array((u1.VALUE, u2.VALUE, u3.VALUE)).transpose()
+        
+        print(ax_j2.VALUE)
 
         return position, thrust, tm_adj
 

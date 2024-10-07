@@ -71,7 +71,7 @@ c2              Final orbit, defined the same as c0
 
 #decay orbit
 n_steps     = 101       # number of steps in soln
-max_u       = 1         # Max acceleration from thrust (m/s^2)
+max_u       = 1e-6      # Max acceleration from thrust (m/s^2)
 time_cost   = 0         # time cost
 fuel_cost   = 1         # fuel cost
 num_orbits  = 100       # max orbit times
@@ -94,10 +94,13 @@ c0 = [a1,e1,i1,ta1,aop1,raan1]
 # random 
 #c2 = [cb['radius']+900.0, 0.01,51.6393,0.0,234.1955,105.6372]
 a,e,i,ta,aop,raan = t.tle2coes(current_dir + '//Dummy_TLEs//AO-85.txt')
-c2 = [cb['radius']+180,0,i,ta,aop,raan]
+c2 = [cb['radius'],0,i+90.0,ta,aop,raan]
 
 min_height  = 300       # min orbit bound
 max_height  = 2000      # max orbit bound 
+
+toggle_j2 = True
+toggle_aero = False
 '''
 END PARAMETERS
 --------------------------------
@@ -105,140 +108,10 @@ If you're just playing with the program, you shouldn't need to change
 anything past here.
 '''
 
-solver = TS(c0, c2, init_percent, fin_percent, max_height, n_steps, max_u)
+solver = TS(c0, c2, init_percent, fin_percent, max_height, n_steps, 
+            max_u, toggle_aero=toggle_aero,toggle_j2=toggle_j2)
 rs, thrust, tm = solver.find_traj_gen()
 
-'''
-#global timespan
-tspan0 = t.find_period(c0[0])
-tspan2 = t.find_period(c2[0])
-if tspan0 > tspan2:
-    tspan = num_orbits*tspan0
-else:
-    tspan = num_orbits*tspan2
-
-op0 = OP(c0,tspan0,dt,coes=True)
-op1 = OP(c2,tspan2,dt,coes=True)
-
-start_index = int(len(op0.rs[:,0])*(init_percent/100))
-final_index = int(len(op1.rs[:,0])*(fin_percent/100))
-
-max_orb = cb['radius'] + max_height
-min_orb = cb['radius'] + min_height
-
-m = GEKKO(remote=False)
-
-#define time varible
-m.time = np.linspace(0, 1, n_steps)
-
-#define fixed variables
-theta_i = m.FV(lb = 0, ub = 360)
-theta_f = m.FV(lb = 0, ub = 360)
-
-rx_i = m.Var(op0.rs[start_index,0])
-ry_i = m.Var(op0.rs[start_index,1])
-rz_i = m.Var(op0.rs[start_index,2])
-
-vx_i = m.Var(op0.vs[start_index,0])
-vy_i = m.Var(op0.vs[start_index,1])
-vz_i = m.Var(op0.vs[start_index,2])
-
-rx_f = m.Var()
-ry_f = m.Var()
-rz_f = m.Var()
-
-vx_f = m.Var()
-vy_f = m.Var()
-vz_f = m.Var()
-
-#o1_tspan = m.Var()
-#o2_tspan = m.Var()
-
-ta_init = np.rad2deg(op0.ta)
-ta_final = np.rad2deg(op1.ta)
-
-#t_vect0 = np.linspace(0,tspan0,len(op0.rs))
-#t_vect1 = np.linspace(0,tspan2,len(op1.rs))
-
-m.cspline(theta_i, rx_i, ta_init, op0.rs[:, 0])
-m.cspline(theta_i, ry_i, ta_init, op0.rs[:, 1])
-m.cspline(theta_i, rz_i, ta_init, op0.rs[:, 2])
-
-m.cspline(theta_i, vx_i, ta_init, op0.vs[:, 0])
-m.cspline(theta_i, vy_i, ta_init, op0.vs[:, 1])
-m.cspline(theta_i, vz_i, ta_init, op0.vs[:, 2])
-
-m.cspline(theta_f, rx_f, ta_final, op1.rs[:, 0])
-m.cspline(theta_f, ry_f, ta_final, op1.rs[:, 1])
-m.cspline(theta_f, rz_f, ta_final, op1.rs[:, 2])
-
-m.cspline(theta_f, vx_f, ta_final, op1.vs[:, 0])
-m.cspline(theta_f, vy_f, ta_final, op1.vs[:, 1])
-m.cspline(theta_f, vz_f, ta_final, op1.vs[:, 2])
-
-r1 = m.Var(rx_i)
-r2 = m.Var(ry_i)
-r3 = m.Var(rz_i)
-
-r1dot = m.Var(vx_i)
-r2dot = m.Var(vy_i)
-r3dot = m.Var(vz_i)
-
-u1 = m.MV(lb = -max_u, ub = max_u)
-u1.STATUS = 1
-u2 = m.MV(lb = -max_u, ub = max_u)
-u2.STATUS = 1
-u3 = m.MV(lb = -max_u, ub = max_u)
-u3.STATUS = 1
-
-#define final time parameter
-tf = m.FV(value=1.0, lb=0.001, ub=tspan)
-tf.STATUS = 1
-
-m.Equation(r1.dt()/tf == r1dot)
-m.Equation(r2.dt()/tf == r2dot)
-m.Equation(r3.dt()/tf == r3dot)
-
-r = m.Var(lb=min_orb, ub=max_orb)
-
-m.Equation(r == m.sqrt(r1**2 + r2**2 + r3**2))
-v = m.Intermediate(m.sqrt(r1dot**2 + r2dot**2 + r3dot**2))
-
-m.Equation(-cb['mu']*r1/r**3 == r1dot.dt()/tf + u1)
-m.Equation(-cb['mu']*r2/r**3 == r2dot.dt()/tf + u2)
-m.Equation(-cb['mu']*r3/r**3 == r3dot.dt()/tf + u3)
-
-#m.fix_final(r1, rx_f)
-#m.fix_final(r2, ry_f)
-#m.fix_final(r3, rz_f)
-# 
-#m.fix_final(r1dot, vx_f)
-#m.fix_final(r2dot, vy_f)
-#m.fix_final(r3dot, vz_f)
-
-m.Minimize(fuel_cost*m.integral(u1**2 + u2**2 + u3**2))
-m.Minimize(time_cost*tf)
-
-final = np.zeros(len(m.time))
-final[-1] = 1
-final = m.Param(value=final)
-
-#print(final*r1.VALUE) 
-
-m.Obj(final*(r1 - op1.rs[final_index, 0])**2)
-m.Obj(final*(r2 - op1.rs[final_index, 1])**2)
-m.Obj(final*(r3 - op1.rs[final_index, 2])**2)
-
-m.Obj(final*(r1dot - op1.vs[final_index, 0])**2)
-m.Obj(final*(r2dot - op1.vs[final_index, 1])**2)
-m.Obj(final*(r3dot - op1.vs[final_index, 2])**2)
-
-m.options.IMODE = 6
-m.options.solver = 3
-#m.options.ATOL = 1e-3
-m.options.MAX_ITER = 5000
-m.solve(disp=True)    # solve
-'''
 #Set dark background
 plt.style.use('dark_background')
 
@@ -248,7 +121,7 @@ plt.style.use('dark_background')
 fig1, (ax0, ax1, ax2) = plt.subplots(1,3)
 
 #xthrust, ythrust, zthrust = thrust[:][0:3].tolist()
-print(thrust.shape)
+#print(thrust.shape)
 
 ax0.plot(tm, thrust[:,0], 'r')
 ax0.set(xlabel='Time [s]', ylabel='Thrust [N]')
@@ -308,4 +181,4 @@ ax.set_aspect('equal')
 ax.set_title('Trajectory Plot')
 plt.legend()
 
-plt.show
+plt.show()

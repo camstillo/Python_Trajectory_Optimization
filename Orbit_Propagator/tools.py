@@ -2,6 +2,7 @@
 Tools.py
 """
 import numpy as np
+from numpy.linalg import norm
 import math as m
 
 import matplotlib.pyplot as plt
@@ -12,6 +13,7 @@ import Planetary_Data as pd
 
 #degrees to rad
 d2r = np.pi/180.0
+r2d = 180.0/np.pi
 
 def plot_n_orbits(rs, labels, cb=pd.earth, show_plot=False, save_plot=False, title='Trajectory Plot'):
     #Set dark background
@@ -92,6 +94,55 @@ def coes2rv(coes, deg=False, mu=pd.earth['mu']):
     v = np.dot(perif2eci, v_perif)
     
     return r, v #, date
+
+def rv2coes(r, v, mu=pd.earth['mu'], degrees=False,print_results=False):
+    # norm of position vector
+    r_norm = norm(r)
+    
+    # specific angular momentum
+    h = np.cross(r,v)
+    h_norm = norm(h)
+
+    # inclination
+    i = m.acos(h[2]/h_norm)
+    
+    #eccentricity vector
+    e = ((norm(v)**2 - mu/r_norm) * r - np.dot(r,v)*v)/mu
+    
+    # eccentricity magnitude
+    e_norm = norm(e)
+    
+    # node line
+    N = np.cross([0,0,1], h)
+    N_norm = norm(N)
+    
+    # RAAN
+    raan = m.acos(N[0]/N_norm)
+    if N[1] < 0: raan = 2*np.pi - raan
+    
+    # AOP
+    aop = m.acos(np.dot(N,e)/N_norm/e_norm)
+    if e[2] < 0: aop = 2*np.pi - aop
+    
+    # True Anomaly
+    ta = m.acos(np.dot(e,r)/e_norm/r_norm)
+    if np.dot(r,v) < 0: ta = 2*np.pi - ta
+    
+    # Semimajor axis
+    a = r_norm*(1 + e_norm * m.cos(ta))/(1 - e_norm**2)
+    
+    if print_results:
+        print('a = ', a)
+        print('e = ', e_norm)
+        print('i = ', i*r2d)
+        print('RAAN = ', raan*r2d)
+        print('AOP = ', aop*r2d)
+        print('TA = ', ta*r2d)
+        
+    if degrees: return [a, e_norm, i*r2d, ta*r2d, aop*r2d, raan*r2d]
+    else: return [a, e_norm, i, ta, aop, raan]
+        
+    
 
 def eci2perif(raan, aop, i):
     row0 = [-m.sin(raan)*m.cos(i)*m.sin(aop) + m.cos(raan)*m.cos(aop),
@@ -203,7 +254,7 @@ def tle2rv(tle_filename):
 
 def true_anomaly_r(rs, mu=pd.earth['mu']):
     # unpack state
-    rx, ry, rz, vx, vy, vz = rs
+    rx, ry, rz, vx, vy, vz, _ = rs
     
     # make vectors from rs
     r = np.array([rx, ry, rz])
@@ -230,5 +281,30 @@ def true_anomaly_r(rs, mu=pd.earth['mu']):
     
 def find_period(a, mu=pd.earth['mu']):
     return 2*np.pi*np.sqrt(a**3/mu)
+
+#Find atmospheric density @ given altitude
+def calc_atmospheric_density (z):
+    rhos,zs = find_rho_z(z)
+    if rhos[0] == 0: return 0.0
+    
+    Hi = -(zs[1] - zs[0])/m.log(rhos[1]/rhos[0])
+    
+    return rhos[0]*m.exp(-(z - zs[0])/Hi)
+
+#Find endpoints of altitude and density surrounding input alitude
+def find_rho_z(z, zs=pd.earth['zs'], rhos=pd.earth['rhos']):
+    if not 1.0 < z < 1000.0:
+        return [[0.0,0.0],[0.0,0.0]]
+    
+    #find two points surrounding given input altitude
+    for n in range(len(rhos)-1):
+        if zs[n] < z < zs[n+1]:
+            return [[rhos[n], rhos[n+1]],[zs[n],zs[n+1]]]
+    
+    #if out of range, return 0
+    return [[0.0,0.0], [0.0,0.0]]
+
+def normed(v):
+    return np.array(v)/np.linalg.norm(v)
     
     
